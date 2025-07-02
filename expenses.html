@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Expense Tracker with Budget Insights</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f4f4f4;
+      color: #333;
+    }
+    h1 {
+      text-align: center;
+    }
+    .container {
+      max-width: 800px;
+      margin: auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 10px #ccc;
+    }
+    form {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+    form input, form select, form button {
+      padding: 8px;
+      font-size: 14px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+    }
+    th {
+      background: #eee;
+    }
+    .summary {
+      margin-top: 20px;
+    }
+    .export-buttons {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Expense Tracker</h1>
+  
+  <form id="entry-form">
+    <input type="text" id="desc" placeholder="Description" required>
+    <input type="number" id="amount" placeholder="Amount" required>
+    <select id="type">
+      <option value="income">Income</option>
+      <option value="expense">Expense</option>
+    </select>
+    <button type="submit">Add</button>
+  </form>
+
+  <table id="data-table">
+    <thead>
+      <tr>
+        <th>Description</th>
+        <th>Amount</th>
+        <th>Type</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div class="summary">
+    <h3>Monthly Summary</h3>
+    <p>Total Income: ₹<span id="total-income">0</span></p>
+    <p>Total Expenses: ₹<span id="total-expense">0</span></p>
+    <p>Net Savings: ₹<span id="net-savings">0</span></p>
+    <canvas id="chart" height="100"></canvas>
+  </div>
+
+  <div class="export-buttons">
+    <button onclick="exportCSV()">Export CSV</button>
+    <button onclick="exportPDF()">Export PDF</button>
+  </div>
+</div>
+
+<script>
+  const form = document.getElementById('entry-form');
+  const tbody = document.querySelector('#data-table tbody');
+  const totalIncome = document.getElementById('total-income');
+  const totalExpense = document.getElementById('total-expense');
+  const netSavings = document.getElementById('net-savings');
+
+  let entries = [];
+
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const desc = document.getElementById('desc').value;
+    const amount = parseFloat(document.getElementById('amount').value);
+    const type = document.getElementById('type').value;
+    const date = new Date().toLocaleDateString();
+
+    entries.push({ desc, amount, type, date });
+    form.reset();
+    updateTable();
+    updateSummary();
+    updateChart();
+  });
+
+  function updateTable() {
+    tbody.innerHTML = '';
+    entries.forEach(entry => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${entry.desc}</td>
+        <td>₹${entry.amount.toFixed(2)}</td>
+        <td>${entry.type}</td>
+        <td>${entry.date}</td>
+      `;
+      tbody.appendChild(row);
+    });
+  }
+
+  function updateSummary() {
+    const income = entries.filter(e => e.type === 'income').reduce((acc, e) => acc + e.amount, 0);
+    const expense = entries.filter(e => e.type === 'expense').reduce((acc, e) => acc + e.amount, 0);
+    totalIncome.textContent = income.toFixed(2);
+    totalExpense.textContent = expense.toFixed(2);
+    netSavings.textContent = (income - expense).toFixed(2);
+  }
+
+  let chart;
+  function updateChart() {
+    const income = entries.filter(e => e.type === 'income').reduce((acc, e) => acc + e.amount, 0);
+    const expense = entries.filter(e => e.type === 'expense').reduce((acc, e) => acc + e.amount, 0);
+
+    if (chart) chart.destroy();
+    const ctx = document.getElementById('chart').getContext('2d');
+    chart = new Chart(ctx, {
+      type: 'pie',
+      data: {
+        labels: ['Income', 'Expense'],
+        datasets: [{
+          data: [income, expense],
+          backgroundColor: ['#4caf50', '#f44336']
+        }]
+      }
+    });
+  }
+
+  function exportCSV() {
+    const csvRows = [
+      ['Description', 'Amount', 'Type', 'Date'],
+      ...entries.map(e => [e.desc, e.amount, e.type, e.date])
+    ];
+    const csvContent = csvRows.map(e => e.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.setAttribute('download', 'expense_data.csv');
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  async function exportPDF() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    doc.text("Expense Tracker Report", 20, 20);
+
+    let y = 30;
+    entries.forEach(entry => {
+      doc.text(`${entry.date} - ${entry.desc} - ₹${entry.amount} - ${entry.type}`, 20, y);
+      y += 10;
+      if (y > 270) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    doc.text(`Total Income: ₹${totalIncome.textContent}`, 20, y + 10);
+    doc.text(`Total Expenses: ₹${totalExpense.textContent}`, 20, y + 20);
+    doc.text(`Net Savings: ₹${netSavings.textContent}`, 20, y + 30);
+
+    doc.save("expense_report.pdf");
+  }
+</script>
+</body>
+</html>
